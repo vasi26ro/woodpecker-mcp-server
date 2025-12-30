@@ -66,12 +66,29 @@ async function fetchLogForStep(repoId: string, pipelineId: string, detail: IPipe
     return result;
 }
 
-function extractDetailsFromPipeline(data: any): IPipelineResult {
+function extractDetailsFromPipeline(data: any): IPipelineResult & { status?: string } {
     // Implement logic to extract details from the pipeline
     // This could involve parsing the pipeline data and returning relevant information
-    const pipelineResult: IPipelineResult = { isSuccess: false, pullRequestUrl: data.forge_url || data.link || `Pipeline #${data.number}`, failedStepDetails: [] };
-    if (data.status !== 'failure') {
+    const pipelineResult: IPipelineResult & { status?: string } = {
+        isSuccess: false,
+        pullRequestUrl: data.forge_url || data.link || `Pipeline #${data.number}`,
+        failedStepDetails: [],
+        status: data.status
+    };
+
+    // Only treat 'success' as success - running/pending are not success
+    if (data.status === 'success') {
         pipelineResult.isSuccess = true;
+        return pipelineResult;
+    }
+
+    // If still running or pending, return early with status info
+    if (data.status === 'running' || data.status === 'pending') {
+        return pipelineResult;
+    }
+
+    // Only continue to extract failure details if status is 'failure'
+    if (data.status !== 'failure') {
         return pipelineResult;
     }
 

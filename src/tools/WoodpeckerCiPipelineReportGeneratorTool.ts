@@ -30,6 +30,13 @@ class WoodpeckerCiPipelineReportGeneratorTool extends MCPTool<WoodpeckerCiPipeli
 			// check failure first
 			const pipelineResult = await getPipelineResult(repoId, pipelineNumber);
 
+			// Check if pipeline is still running
+			const status = (pipelineResult as any).status;
+			if (status === 'running' || status === 'pending') {
+				// Don't cache running pipelines
+				return `Pipeline ${pipelineNumber} is currently ${status}. Please wait for it to complete.`;
+			}
+
 			if (pipelineResult.isSuccess) {
 				const response = `Pipeline ${pipelineNumber} for PR ${pipelineResult.pullRequestUrl} completed successfully. No failed steps detected.`;
 				pipelineLogCache.set(cacheKey, response);
