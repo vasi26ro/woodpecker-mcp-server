@@ -22,33 +22,32 @@ export class GitBasedPipelineAnalyzerTool extends MCPTool<GitBasedPipelineAnalyz
     super();
   }
 
-  async execute(input: GitBasedPipelineAnalyzerInput) {
+  async execute(input: GitBasedPipelineAnalyzerInput): Promise<string> {
     const { repoName, pullRequestNumber } = input;
 
-    // Always fetch latest pipeline details for the PR
-    // (No caching here since PRs can have multiple pipelines as new commits are pushed)
-    logger.info(`Resolving latest pipeline details for: ${repoName} PR #${pullRequestNumber}`);
-    const pipelineDetails = await this.woodpeckerForgesService.getPipelineDetails({ repoName, pullRequestNumber });
+    try {
+      // Always fetch latest pipeline details for the PR
+      // (No caching here since PRs can have multiple pipelines as new commits are pushed)
+      logger.info(`Resolving latest pipeline details for: ${repoName} PR #${pullRequestNumber}`);
+      const pipelineDetails = await this.woodpeckerForgesService.getPipelineDetails({ repoName, pullRequestNumber });
 
-    const { repoId, pipelineNumber, status } = pipelineDetails;
+      const { repoId, pipelineNumber, status } = pipelineDetails;
 
-    if (status === 'running') {
-      return {
-        content: [{
-          type: "text",
-          details: `Pipeline for repository '${repoName}' PR #${pullRequestNumber} is currently running. Please wait for it to complete before analyzing failures.`,
-          moreDetails: []
-        }]
-      };
+      if (status === 'running') {
+        return `Pipeline for repository '${repoName}' PR #${pullRequestNumber} is currently running. Please wait for it to complete before analyzing failures.`;
+      }
+
+      // Execute the original tool with resolved parameters
+      // (WoodpeckerCiPipelineReportGeneratorTool already handles its own caching)
+      logger.info(`Analyzing pipeline ${pipelineNumber} for repository ${repoId}`);
+      return await this.woodpeckerTool.execute({
+        repoId,
+        pipelineNumber
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return `Error analyzing pipeline for ${repoName} PR #${pullRequestNumber}: ${errorMessage}`;
     }
-
-    // Execute the original tool with resolved parameters
-    // (WoodpeckerCiPipelineReportGeneratorTool already handles its own caching)
-    logger.info(`Analyzing pipeline ${pipelineNumber} for repository ${repoId}`);
-    return await this.woodpeckerTool.execute({
-      repoId,
-      pipelineNumber
-    });
   }
 }
 

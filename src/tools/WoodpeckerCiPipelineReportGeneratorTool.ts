@@ -16,39 +16,43 @@ class WoodpeckerCiPipelineReportGeneratorTool extends MCPTool<WoodpeckerCiPipeli
 
 	schema = pipelineDetailSchema;
 
-	async execute(input: WoodpeckerCiPipelineReportGeneratorInput) {
+	async execute(input: WoodpeckerCiPipelineReportGeneratorInput): Promise<string> {
 		const {pipelineNumber, repoId} = input;
 		const cacheKey = `${repoId}:${pipelineNumber}`;
 
-		// check cache first
-		if (pipelineLogCache.has(cacheKey)) {
-			logger.info('Returning cached pipeline log for key: ' + cacheKey);
-			return pipelineLogCache.get(cacheKey);
-		}
+		try {
+			// check cache first
+			if (pipelineLogCache.has(cacheKey)) {
+				logger.info('Returning cached pipeline log for key: ' + cacheKey);
+				return pipelineLogCache.get(cacheKey);
+			}
 
-		// check failure first
-		const pipelineResult = await getPipelineResult(repoId, pipelineNumber);
-		const responseToAI = {
-			content: [{
-				type: "text",
-				details: pipelineResult.isSuccess ? `Pipeline ${pipelineNumber} for PR ${pipelineResult.pullRequestUrl} completed successfully. No failed steps detected.`
-					: pipelineResult.error,
-				moreDetails: [] as any[]
-			}],
-		}
+			// check failure first
+			const pipelineResult = await getPipelineResult(repoId, pipelineNumber);
 
-		if (pipelineResult.isSuccess || pipelineResult.error?.includes("Failed to fetch")) {
-			pipelineLogCache.set(cacheKey, responseToAI);
-			return responseToAI;
-		}
+			if (pipelineResult.isSuccess) {
+				const response = `Pipeline ${pipelineNumber} for PR ${pipelineResult.pullRequestUrl} completed successfully. No failed steps detected.`;
+				pipelineLogCache.set(cacheKey, response);
+				return response;
+			}
 
-		// If the pipeline failed, we need to fetch the logs for each failed step
-		const stepDetails = pipelineResult.failedStepDetails;
-		const response = await getLogForPipelineStep(repoId, pipelineNumber, stepDetails);
-		responseToAI.content[0].details = `Pipeline ${pipelineNumber} for PR ${pipelineResult.pullRequestUrl} has failed.`
-		responseToAI.content[0].moreDetails = response;
-		pipelineLogCache.set(cacheKey, responseToAI);
-		return responseToAI
+			if (pipelineResult.error?.includes("Failed to fetch")) {
+				const response = pipelineResult.error;
+				pipelineLogCache.set(cacheKey, response);
+				return response;
+			}
+
+			// If the pipeline failed, we need to fetch the logs for each failed step
+			const stepDetails = pipelineResult.failedStepDetails;
+			const logDetails = await getLogForPipelineStep(repoId, pipelineNumber, stepDetails);
+
+			const response = `Pipeline ${pipelineNumber} for PR ${pipelineResult.pullRequestUrl} has failed.\n\nFailed steps details:\n${JSON.stringify(logDetails, null, 2)}`;
+			pipelineLogCache.set(cacheKey, response);
+			return response;
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			return `Error analyzing pipeline ${pipelineNumber}: ${errorMessage}`;
+		}
 	}
 }
 

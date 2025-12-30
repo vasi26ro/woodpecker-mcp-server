@@ -28,7 +28,7 @@ async function getPipelineResult(repoId: string, pipelineId: string): Promise<IP
     const data = await response.json();
 
     if (!response.ok) {
-        return { isSuccess: false, pullRequestUrl:data.forge_url,  failedStepDetails: [], error: `Failed to fetch pipeline details: ${response.statusText}` };
+        return { isSuccess: false, pullRequestUrl: data?.forge_url || 'unknown',  failedStepDetails: [], error: `Failed to fetch pipeline details: ${response.statusText}` };
     }
 
     return extractDetailsFromPipeline(data);
@@ -59,7 +59,9 @@ async function fetchLogForStep(repoId: string, pipelineId: string, detail: IPipe
     const logs = await response.json();
     // logs are encoded as base64 we need to decode them
     logs.forEach((log: any) => {
-        result.log.push(decode(log.data));
+        if (log.data) {
+            result.log.push(decode(log.data));
+        }
     });
     return result;
 }
@@ -67,7 +69,7 @@ async function fetchLogForStep(repoId: string, pipelineId: string, detail: IPipe
 function extractDetailsFromPipeline(data: any): IPipelineResult {
     // Implement logic to extract details from the pipeline
     // This could involve parsing the pipeline data and returning relevant information
-    const pipelineResult: IPipelineResult = { isSuccess: false, pullRequestUrl: data.forge_url, failedStepDetails: [] };
+    const pipelineResult: IPipelineResult = { isSuccess: false, pullRequestUrl: data.forge_url || data.link || `Pipeline #${data.number}`, failedStepDetails: [] };
     if (data.status !== 'failure') {
         pipelineResult.isSuccess = true;
         return pipelineResult;
